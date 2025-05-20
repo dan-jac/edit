@@ -1990,31 +1990,45 @@ impl TextBuffer {
         let mut y = beg.logical_pos.y;
 
         loop {
-            let mut remove = 0;
+            let line_start = offset;
+            // Find the end of the current line
+            while offset < replacement.len() && replacement[offset] != b'\n' && replacement[offset] != b'\r' {
+                offset += 1;
+            }
+            let line_end = offset;
 
-            if replacement[offset] == b'\t' {
-                remove = 1;
-            } else {
-                while remove < self.tab_size as usize
-                    && offset + remove < replacement.len()
-                    && replacement[offset + remove] == b' '
-                {
-                    remove += 1;
+            // Remove leading indentation from this line
+            let mut remove = 0;
+            if line_end > line_start {
+                if replacement[line_start] == b'\t' {
+                    remove = 1;
+                } else {
+                    while remove < self.tab_size as usize
+                        && line_start + remove < line_end
+                        && replacement[line_start + remove] == b' '
+                    {
+                        remove += 1;
+                    }
+                }
+                if remove > 0 {
+                    replacement.drain(line_start..line_start + remove);
+                    offset -= remove;
+                }
+                if y == selection_beg.y {
+                    selection_beg.x -= remove as CoordType;
+                }
+                if y == selection_end.y {
+                    selection_end.x -= remove as CoordType;
                 }
             }
 
-            if remove > 0 {
-                replacement.drain(offset..offset + remove);
+            // Move past newline
+            if offset < replacement.len() && (replacement[offset] == b'\n' || replacement[offset] == b'\r') {
+                offset += 1;
             }
+            y += 1;
 
-            if y == selection_beg.y {
-                selection_beg.x -= remove as CoordType;
-            }
-            if y == selection_end.y {
-                selection_end.x -= remove as CoordType;
-            }
-
-            (offset, y) = unicode::newlines_forward(&replacement, offset, y, y + 1);
+            // Stop if we've processed all lines
             if offset >= replacement.len() {
                 break;
             }
